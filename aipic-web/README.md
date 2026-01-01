@@ -112,7 +112,50 @@ AIPIC 是一个面向家庭用户的本地照片管理解决方案，旨在解�
 set PATH=%PATH%;C:\Program Files\nodejs
 ```
 
+#### 依赖安装失败
+
+某些依赖（`better-sqlite3`、`sharp`）需要本地编译工具：
+- 安装 [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
+- 或使用预编译版本：`npm install --prefer-binary`
+
 详细安装指南请查看 [INSTALL_GUIDE.md](./INSTALL_GUIDE.md)
+
+---
+
+## 🛠️ 开发命令
+
+```bash
+# 安装依赖
+npm install
+
+# 启动开发服务器（热重载）
+npm run dev
+
+# 构建生产版本
+npm run build
+
+# 预览生产版本
+npm run preview
+
+# 代码检查
+npm run lint
+
+# TypeScript类型检查
+npm run type-check
+```
+
+### 添加shadcn/ui组件
+
+```bash
+# 添加单个组件
+npx shadcn@latest add button
+
+# 添加多个组件
+npx shadcn@latest add button input dialog dropdown-menu tabs switch toast
+
+# 查看所有可用组件
+npx shadcn@latest add
+```
 
 ---
 
@@ -231,24 +274,385 @@ npm run build
 npm run lint
 ```
 
-### 构建部署
+### 项目规范
 
-```bash
-# 构建生产版本
-npm run build
+#### 目录结构约定
 
-# 预览生产版本
-npm run preview
+```
+src/
+├── components/          # 可复用组件
+│   ├── ui/             # shadcn/ui基础组件（不要手动修改）
+│   └── [Feature]/      # 功能组件（按功能分组）
+├── pages/              # 页面组件（一个文件一个页面）
+├── lib/                # 核心逻辑
+│   ├── db/            # 数据库相关
+│   ├── utils.ts       # 工具函数
+│   └── constants.ts   # 常量定义
+├── types/              # TypeScript类型定义
+├── contexts/           # React Context
+├── hooks/              # 自定义Hooks
+└── styles/             # 全局样式
 ```
 
-### 添加shadcn/ui组件
+#### 命名规范
+
+- **组件文件**：PascalCase（如 `PhotoCard.tsx`）
+- **工具文件**：camelCase（如 `formatDate.ts`）
+- **常量**：UPPER_SNAKE_CASE（如 `MAX_FILE_SIZE`）
+- **接口/类型**：PascalCase（如 `Photo`, `Album`）
+- **函数**：camelCase（如 `getPhotoById`）
+
+#### 组件开发
+
+**✅ 推荐：函数式组件 + Hooks**
+
+```tsx
+import { useState, useEffect } from 'react';
+
+interface PhotoCardProps {
+  photo: Photo;
+  onSelect?: (id: number) => void;
+}
+
+export function PhotoCard({ photo, onSelect }: PhotoCardProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <div 
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={() => onSelect?.(photo.id)}
+    >
+      {/* ... */}
+    </div>
+  );
+}
+```
+
+**❌ 避免：类组件**
+
+```tsx
+// 不推荐使用类组件
+class PhotoCard extends React.Component { ... }
+```
+
+#### 样式规范
+
+**✅ 推荐：Tailwind CSS**
+
+```tsx
+<div className="flex items-center gap-4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow-md hover:shadow-lg transition-shadow">
+  {/* ... */}
+</div>
+```
+
+**❌ 避免：自定义CSS**
+
+```css
+/* 避免创建 .css 文件 */
+.photo-card {
+  display: flex;
+  padding: 1rem;
+  /* ... */
+}
+```
+
+#### 状态管理
+
+- **简单状态**：使用 `useState`
+- **复杂状态**：使用 `useReducer`
+- **全局状态**：使用 React Context
+- **服务端状态**：考虑使用 React Query（可选）
+
+```tsx
+// 简单状态
+const [count, setCount] = useState(0);
+
+// 复杂状态
+const [state, dispatch] = useReducer(reducer, initialState);
+
+// 全局状态
+const { theme, setTheme } = useTheme();
+```
+
+### 数据库操作
+
+#### Repository模式
+
+```typescript
+// lib/db/repositories/PhotoRepository.ts
+export class PhotoRepository {
+  private db: Database;
+
+  constructor(db: Database) {
+    this.db = db;
+  }
+
+  findById(id: number): Photo | null {
+    const stmt = this.db.prepare('SELECT * FROM photos WHERE id = ?');
+    return stmt.get(id) as Photo | null;
+  }
+
+  findAll(limit = 100, offset = 0): Photo[] {
+    const stmt = this.db.prepare('SELECT * FROM photos LIMIT ? OFFSET ?');
+    return stmt.all(limit, offset) as Photo[];
+  }
+
+  create(photo: Omit<Photo, 'id'>): Photo {
+    const stmt = this.db.prepare(`
+      INSERT INTO photos (hash, original_filename, file_path, ...)
+      VALUES (?, ?, ?, ...)
+    `);
+    const result = stmt.run(...Object.values(photo));
+    return { ...photo, id: result.lastInsertRowid as number };
+  }
+}
+```
+
+#### 使用Repository
+
+```typescript
+import { getDatabase } from '@/lib/db/connection';
+import { PhotoRepository } from '@/lib/db/repositories/PhotoRepository';
+
+const db = getDatabase();
+const photoRepo = new PhotoRepository(db);
+
+// 查询
+const photo = photoRepo.findById(1);
+const photos = photoRepo.findAll(20, 0);
+
+// 创建
+const newPhoto = photoRepo.create({
+  hash: 'abc123...',
+  original_filename: 'IMG_001.jpg',
+  // ...
+});
+```
+
+### TypeScript类型
+
+#### 定义类型
+
+```typescript
+// types/photo.ts
+export interface Photo {
+  id: number;
+  hash: string;
+  original_filename: string;
+  file_path: string;
+  size: number;
+  mime_type: string;
+  width?: number;
+  height?: number;
+  taken_at?: string;
+  latitude?: number;
+  longitude?: number;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PhotoCreateInput = Omit<Photo, 'id' | 'created_at' | 'updated_at'>;
+export type PhotoUpdateInput = Partial<PhotoCreateInput>;
+```
+
+#### 使用类型
+
+```typescript
+import type { Photo, PhotoCreateInput } from '@/types/photo';
+
+function createPhoto(input: PhotoCreateInput): Photo {
+  // ...
+}
+
+const photos: Photo[] = [];
+```
+
+### 性能优化
+
+#### 虚拟滚动
+
+对于大量照片，使用虚拟滚动：
+
+```tsx
+import { useVirtualizer } from '@tanstack/react-virtual';
+
+function PhotoGrid({ photos }: { photos: Photo[] }) {
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: photos.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 250, // 每项高度
+    overscan: 5, // 预渲染项数
+  });
+
+  return (
+    <div ref={parentRef} className="h-screen overflow-auto">
+      <div style={{ height: `${virtualizer.getTotalSize()}px` }}>
+        {virtualizer.getVirtualItems().map((item) => (
+          <PhotoCard key={item.key} photo={photos[item.index]} />
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+#### 懒加载图片
+
+```tsx
+import { useState, useEffect, useRef } from 'react';
+
+function LazyImage({ src, alt }: { src: string; alt: string }) {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setIsLoaded(true);
+        observer.disconnect();
+      }
+    });
+
+    if (imgRef.current) {
+      observer.observe(imgRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <img
+      ref={imgRef}
+      src={isLoaded ? src : '/placeholder.jpg'}
+      alt={alt}
+      loading="lazy"
+    />
+  );
+}
+```
+
+### 测试（规划中）
 
 ```bash
-# 添加单个组件
-npx shadcn@latest add button
+# 运行测试
+npm run test
 
-# 添加多个组件
-npx shadcn@latest add button input dialog dropdown-menu
+# 测试覆盖率
+npm run test:coverage
+
+# 端到端测试
+npm run test:e2e
+```
+
+---
+
+## 🎨 设计系统
+
+### 色彩方案
+
+```css
+/* Tailwind配置 */
+module.exports = {
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          DEFAULT: '#0066FF',
+          50: '#E6F0FF',
+          100: '#CCE0FF',
+          500: '#0066FF',
+          600: '#0052CC',
+          700: '#003D99',
+        },
+        accent: {
+          DEFAULT: '#FF6B35',
+          50: '#FFE8E0',
+          100: '#FFD1C1',
+          500: '#FF6B35',
+          600: '#E65528',
+          700: '#CC3F1B',
+        },
+      },
+    },
+  },
+};
+```
+
+### 组件样式
+
+#### 按钮
+
+```tsx
+import { Button } from '@/components/ui/button';
+
+// 主按钮
+<Button variant="default">上传照片</Button>
+
+// 次要按钮
+<Button variant="secondary">取消</Button>
+
+// 危险按钮
+<Button variant="destructive">删除</Button>
+
+// 图标按钮
+<Button variant="ghost" size="icon">
+  <IconTrash />
+</Button>
+```
+
+#### 卡片
+
+```tsx
+<div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+  <h3 className="text-lg font-semibold mb-2">标题</h3>
+  <p className="text-gray-600 dark:text-gray-300">内容</p>
+</div>
+```
+
+#### 输入框
+
+```tsx
+import { Input } from '@/components/ui/input';
+
+<Input 
+  type="text" 
+  placeholder="搜索照片..." 
+  className="w-full"
+/>
+```
+
+### 图标使用
+
+```tsx
+import { 
+  Search, 
+  Upload, 
+  Trash2, 
+  Download,
+  Settings 
+} from 'lucide-react';
+
+<Search className="w-5 h-5 text-gray-500" />
+<Upload className="w-6 h-6 text-primary" />
+```
+
+### 动画
+
+```tsx
+// 淡入
+<div className="animate-in fade-in duration-300">...</div>
+
+// 滑入
+<div className="animate-in slide-in-from-bottom duration-500">...</div>
+
+// 自定义过渡
+<div className="transition-all duration-300 hover:scale-105 hover:shadow-xl">
+  ...
+</div>
 ```
 
 ---
