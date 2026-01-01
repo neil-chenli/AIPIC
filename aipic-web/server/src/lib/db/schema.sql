@@ -240,3 +240,4 @@ CREATE TRIGGER IF NOT EXISTS update_users_timestamp
 BEGIN
   UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
+

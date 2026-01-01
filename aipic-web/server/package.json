@@ -1,0 +1,35 @@
+{
+  "name": "aipic-server",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fastify": "^4.x",
+    "@fastify/cors": "^9.x",
+    "@fastify/multipart": "^8.x",
+    "@fastify/static": "^6.x",
+    "@fastify/jwt": "^7.x",
+    "better-sqlite3": "^11.x",
+    "sharp": "^0.33.x",
+    "exifr": "^7.x",
+    "bcrypt": "^5.x",
+    "jsonwebtoken": "^9.x",
+    "zod": "^3.x"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/bcrypt": "^5.0.2",
+    "@types/jsonwebtoken": "^9.0.7",
+    "typescript": "~5.6.2",
+    "tsx": "^4.19.2",
+    "pino-pretty": "^11.2.2"
+  }
+}
+
