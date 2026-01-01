@@ -33,9 +33,8 @@ build/
 logs/
 *.log
 
-# Photo data (large files)
-picDATA/photos/
-picDATA/thumbnails/
+# Photo data (large files - test image library)
+picDATA/
 
 # Temporary files
 tmp/
